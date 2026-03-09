@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Explorer"
+  short_description: "Tree-driven end-to-end task exploration"
+  default_prompt: "Use $task-explorer to explore this task as a scored search tree, rank frontier leaves, and keep the tree updated until the result is verified or no credible branch remains."
