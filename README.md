@@ -64,6 +64,57 @@ Chinese usage also fits naturally:
 用 $task-explorer 把这个任务当成探索树来做，持续展示前沿、当前叶子、失败回溯和最终结论。
 ```
 
+## OpenClaw Quick Start
+
+OpenClaw uses AgentSkills-compatible skill folders, so this repository can be installed as a normal OpenClaw skill. See the official Skills docs: <https://docs.openclaw.ai/tools/skills>.
+
+OpenClaw loads skills from:
+
+- `~/.openclaw/skills`
+- `<workspace>/skills`
+
+If the same skill name exists in both places, the workspace copy wins.
+
+### Option 1: Shared install for all local OpenClaw agents
+
+PowerShell example:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.openclaw\skills" | Out-Null
+git clone https://github.com/sunyixiao/task-explorer.git "$HOME\.openclaw\skills\task-explorer"
+```
+
+This makes the skill visible to OpenClaw agents on the same machine.
+
+### Option 2: Workspace-only install
+
+From your OpenClaw workspace root:
+
+```powershell
+New-Item -ItemType Directory -Force ".\skills" | Out-Null
+git clone https://github.com/sunyixiao/task-explorer.git ".\skills\task-explorer"
+```
+
+Use this when you want the skill to apply only to one workspace or one agent setup.
+
+### After installing
+
+Start a new OpenClaw session before testing.
+
+OpenClaw snapshots eligible skills when a session starts, so a new session is the safest way to pick up a newly installed skill. If the skills watcher is enabled, changes to `SKILL.md` can also refresh during a session, but relying on a fresh session is more predictable.
+
+### Invoking in OpenClaw
+
+Example prompts:
+
+```text
+Use $task-explorer to explore this repository as a search tree, keep the frontier visible, and stop only after verification or frontier exhaustion.
+```
+
+```text
+用 $task-explorer 把这个问题当成探索树来做，持续展示当前前沿、当前选中叶子、失败回溯和最终结论。
+```
+
 ## Good Prompts
 
 - "Explore this bug as a search tree and keep showing the tree."
@@ -120,3 +171,4 @@ task-explorer/
 
 - This repository is human-facing. The actual skill logic lives in `SKILL.md`.
 - The README is for GitHub visitors; the skill runtime does not depend on it.
+- OpenClaw installation details in this README follow the official Skills documentation: <https://docs.openclaw.ai/tools/skills>.
