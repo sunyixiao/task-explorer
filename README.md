@@ -1,6 +1,9 @@
-﻿# Task Explorer
+# Task Explorer
 
 Tree-driven autonomous task exploration for Codex-style agents.
+
+Original author: **sunyixiao**  
+Original repository: <https://github.com/sunyixiao/task-explorer>
 
 `task-explorer` is a skill that pushes an agent to treat a task as a search tree instead of a linear checklist. It generates multiple routes, scores active frontier leaves, chooses the most promising affordable shortest path, backtracks after failure, and keeps the user updated with the current exploration tree.
 
