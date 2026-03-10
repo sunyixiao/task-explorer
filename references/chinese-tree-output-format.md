@@ -2,6 +2,7 @@
 
 When the user is communicating in Chinese, prefer this user-facing format.
 Keep node IDs such as `A`, `A2`, `B1` and score fields such as `p`, `s`, `r`, `d`, `c`, `score` in ASCII so branches remain easy to compare.
+Also keep node types as ASCII `OR` and `AND`.
 
 ## Recommended Chinese Labels
 
@@ -9,6 +10,7 @@ Use these labels by default:
 
 - `Exploration Tree` -> `探索树`
 - `Root objective` -> `根目标`
+- `Node type` -> `节点类型`
 - `Current tree` -> `当前树`
 - `Frontier` -> `当前前沿`
 - `Selected leaf` -> `当前选中叶子`
@@ -40,11 +42,11 @@ You may keep the raw English status token in brackets if consistency matters mor
 ```text
 探索树
 [0] 根目标: 修复启动慢并给出已验证结论 [活跃]
-|- [A] 复现并测量基线 [完成] p=3 s=3 r=3 d=1 c=1 score=14
-|  |- [A1] 对比冷启动与热启动 [失败] p=1 s=2 r=3 d=2 c=1 score=4
-|  \- [A2] 分析 import 路径耗时 [活跃] p=3 s=3 r=3 d=1 c=1 score=15 <- 当前选中
-|- [B] 检查配置加载路径 [活跃] p=2 s=2 r=3 d=2 c=1 score=10
-\- [C] 检查 IO 或网络等待 [活跃] p=1 s=2 r=2 d=2 c=2 score=4
+|- [A][OR] 复现并测量基线 [完成] p=3 s=3 r=3 d=1 c=1 score=14
+|  |- [A1][OR] 对比冷启动与热启动 [失败] p=1 s=2 r=3 d=2 c=1 score=4
+|  \- [A2][OR] 分析 import 路径耗时 [活跃] p=3 s=3 r=3 d=1 c=1 score=15 <- 当前选中
+|- [B][OR] 检查配置加载路径 [活跃] p=2 s=2 r=3 d=2 c=1 score=10
+\- [C][OR] 检查 IO 或网络等待 [活跃] p=1 s=2 r=2 d=2 c=2 score=4
 
 当前前沿: A2, B, C
 当前选中叶子: A2
@@ -58,10 +60,10 @@ You may keep the raw English status token in brackets if consistency matters mor
 
 ```text
 前沿表
-ID   目标                             p  s  r  d  c  score  状态    下一步
-A2   分析 import 路径耗时             3  3  3  1  1  15     活跃    运行 import-time profiler
-B1   检查配置加载                     2  2  3  2  1  10     活跃    跟踪配置读取路径
-C1   检查外部 IO 等待                 1  2  2  2  2   4     活跃    本地禁用网络调用后复测
+ID   type  目标                        p  s  r  d  c  score  状态    下一步
+A2   OR    分析 import 路径耗时        3  3  3  1  1  15     活跃    运行 import-time profiler
+B1   OR    检查配置加载                2  2  3  2  1  10     活跃    跟踪配置读取路径
+C1   OR    检查外部 IO 等待            1  2  2  2  2   4     活跃    本地禁用网络调用后复测
 ```
 
 Keep the table narrow.
@@ -91,10 +93,41 @@ When the frontier is exhausted, state it plainly:
 结论: 在当前证据与约束下，任务暂时无法继续推进。
 ```
 
+## OR and AND Rules
+
+这部分最重要，必须严格执行：
+
+- `OR` 父节点的兄弟节点代表互斥的候选路线。
+- `OR` 父节点只需要一个子节点成功即可满足。
+- 不能把多个 `OR` 兄弟节点的部分进展拼起来当成父节点成功。
+- 如果某条已选路线内部需要多个必做步骤，先插入一个显式 `AND` 节点，再把这些步骤挂在它下面。
+
+错误示例：
+
+```text
+[C][OR] 已知事件路线
+|- [C1] 整理事件
+\- [C2] 获取数据
+```
+
+然后把 `C1 + C2` 共同当成 `C` 的完成条件。
+
+正确示例：
+
+```text
+[C][OR] 通过已知事件路线完成分析
+\- [Cx][AND] 执行路线 C
+   |- [Cx1] 整理事件
+   \- [Cx2] 获取数据
+```
+
+这里 `C` 是候选路线，`Cx` 才是该路线内部的必做步骤分解。
+
 ## Style Rules
 
 - Prefer short Chinese sentences over verbose narration.
 - Explain why the selected leaf beat the main alternatives.
 - Distinguish confirmed facts from estimates.
 - If no credible branch remains, say so directly instead of implying that more searching will surely help.
+
 

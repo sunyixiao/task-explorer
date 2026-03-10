@@ -61,14 +61,15 @@ Use it as a disciplined ranking aid.
 
 ```text
 Frontier Table
-ID   Goal                              p  s  r  d  c  Score  Status   Next
-A2   Profile import path               3  3  3  1  1  15     active   run import-time profiler
-B1   Inspect config loading            2  2  3  2  1  10     active   trace config reads
-C1   Check external IO waits           1  2  2  2  2   4     active   disable network calls locally
+ID   Type  Goal                        p  s  r  d  c  Score  Status   Next
+A2   OR    Profile import path         3  3  3  1  1  15     active   run import-time profiler
+B1   OR    Inspect config loading      2  2  3  2  1  10     active   trace config reads
+C1   OR    Check external IO waits     1  2  2  2  2   4     active   disable network calls locally
 ```
 
 Always select the highest-scoring credible leaf.
 If the table hides an important nuance, explain it in one line below the table.
+Do not compare `AND` execution subtasks and `OR` candidate routes as if they meant the same thing; the type column must stay visible.
 
 ## Tree Update Template
 
@@ -78,9 +79,9 @@ Root objective: <goal>
 
 Current tree
 [0] Root: <goal> [active]
-|- [A] <branch> [status]
-|  \- [A2] <leaf> [active] p=3 s=3 r=3 d=1 c=1 score=15 <- selected
-\- [B] <branch> [active] p=2 s=2 r=3 d=2 c=1 score=10
+|- [A][OR] <branch> [status]
+|  \- [A2][OR] <leaf> [active] p=3 s=3 r=3 d=1 c=1 score=15 <- selected
+\- [B][OR] <branch> [active] p=2 s=2 r=3 d=2 c=1 score=10
 
 Frontier: A2, B
 Selected leaf: A2
@@ -89,6 +90,8 @@ Next action: <concrete next step>
 Last result: <what just happened>
 If this fails: <next best frontier leaf or re-expansion plan>
 ```
+
+The very first substantive reply after initial branching should already use this structure or the compact tree format.
 
 ## Failure and Exhaustion Template
 
@@ -103,6 +106,13 @@ Next selected leaf: <id or none>
 Higher-level re-expansion: <what new branch search was attempted>
 Conclusion: <either the next route or that no credible branch remains under current constraints>
 ```
+
+## OR and AND Reminder
+
+- `OR` children are alternative routes. One successful child can satisfy the parent.
+- `AND` children are mandatory steps. All required children must complete.
+- If a route needs mandatory work items, insert an explicit `AND` node under that route.
+- Never combine sibling `OR` routes into one composite success path.
 
 ## When to Stop
 

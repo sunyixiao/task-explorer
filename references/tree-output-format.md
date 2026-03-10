@@ -8,6 +8,7 @@ Keep it compact, current, and easy to compare.
 Always show:
 
 - root objective
+- node type for every expanded parent (`OR` or `AND`)
 - active frontier leaves
 - currently selected leaf
 - status changes since the last update
@@ -17,6 +18,7 @@ Always show:
 
 Use these compact fields in the tree:
 
+- `type`: `OR` or `AND`
 - `p`: estimated success likelihood
 - `d`: estimated remaining steps
 - `c`: next-step cost
@@ -27,11 +29,11 @@ Use these compact fields in the tree:
 ```text
 Exploration Tree
 [0] Root: fix slow startup and land a verified fix [active]
-|- [A] Reproduce and measure baseline [done] p=0.85 d=1 c=1
-|  |- [A1] Compare cold and warm start [failed] p=0.20 d=2 c=1
-|  \- [A2] Profile import path [active] p=0.70 d=1 c=2 <- selected
-|- [B] Inspect config loading path [active] p=0.55 d=2 c=1
-\- [C] Check IO or network waits [active] p=0.45 d=2 c=2
+|- [A][OR] Reproduce and measure baseline [done] p=0.85 d=1 c=1
+|  |- [A1][OR] Compare cold and warm start [failed] p=0.20 d=2 c=1
+|  \- [A2][OR] Profile import path [active] p=0.70 d=1 c=2 <- selected
+|- [B][OR] Inspect config loading path [active] p=0.55 d=2 c=1
+\- [C][OR] Check IO or network waits [active] p=0.45 d=2 c=2
 
 Frontier: A2, B, C
 Selected leaf: A2
@@ -44,6 +46,7 @@ Last change: A1 failed because the measured gap was negligible
 Update the tree after:
 
 - initial branching
+- the first substantive reply after branching, even if the user did not ask for the tree
 - selecting a new leaf
 - expanding a leaf into children
 - marking a leaf failed, blocked, pruned, or done
@@ -76,3 +79,31 @@ When no branch remains credible, say so directly.
 Example:
 
 - "The frontier is exhausted. I checked higher-level alternatives and did not find a credible new branch under the current constraints."
+
+## OR and AND Rules
+
+Apply these display rules:
+
+- If siblings are competing solutions, the parent must be shown as `OR`.
+- If siblings are mandatory substeps, the parent must be shown as `AND`.
+- Never show sibling `OR` nodes as if they must all succeed together.
+- If a chosen route needs mandatory subtasks, insert an explicit `AND` node beneath that route before listing those subtasks.
+
+Bad pattern:
+
+```text
+[C][OR] Solve the task
+|- [C1] Prepare events
+\- [C2] Fetch market data
+```
+
+and then treating `C1 + C2` as jointly required to satisfy `C`.
+
+Correct pattern:
+
+```text
+[C][OR] Solve via known-event route
+\- [Cx][AND] Execute route C
+   |- [Cx1] Prepare events
+   \- [Cx2] Fetch market data
+```

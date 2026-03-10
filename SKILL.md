@@ -1,13 +1,13 @@
 ---
 name: task-explorer
-description: "Tree-driven autonomous task exploration and execution for unfamiliar codebases, bugs, workflows, datasets, and product questions. Use when Codex should proactively explore a task as a branching search tree, generate multiple solution routes, score and rank frontier leaves by success likelihood, remaining path length, execution cost, and information gain, backtrack after failed branches, check whether new branches can still be invented when the frontier is exhausted, and keep the user updated with the current exploration tree. Typical triggers include requests to explore independently, think through several routes, avoid stopping at planning, show the search tree, or keep trying alternatives until one succeeds or no credible route remains."
+description: "Tree-driven autonomous task exploration and execution for unfamiliar codebases, bugs, workflows, datasets, and product questions. Use when Codex should proactively explore a task as a branching search tree, generate multiple solution routes, score and rank frontier leaves by success likelihood, remaining path length, execution cost, and information gain, distinguish OR route nodes from AND subtask nodes, backtrack after failed branches, check whether new branches can still be invented when the frontier is exhausted, and keep the user updated with the current exploration tree without waiting to be asked. Typical triggers include requests to explore independently, think through several routes, avoid stopping at planning, show the search tree, or keep trying alternatives until one succeeds or no credible route remains."
 ---
 
 # Task Explorer
 
 ## Overview
 
-Treat the task as a search tree instead of a single linear plan.
+Treat the task as an AND/OR search tree instead of a single linear plan.
 Maintain an explicit frontier of active leaf nodes, always pursue the most promising affordable shortest route, and keep expanding or backtracking until the task is finished or a real external blocker remains.
 
 ## Core Model
@@ -19,9 +19,18 @@ Use these meanings consistently:
 - Leaf node: a branch that can be advanced next
 - Frontier: all non-failed leaves that still might reach the goal
 
+Every non-root node must also declare a node type:
+
+- `OR`: children are alternative self-sufficient routes to satisfy the parent
+- `AND`: children are mandatory substeps inside one chosen route
+
+Default to `OR` when branching the search.
+Use `AND` only when the parent truly requires multiple child steps to be completed together.
+
 Track these fields for every active or recently failed node:
 
 - `id`: short stable label such as `A`, `A2`, `B1`
+- `type`: `OR` or `AND`
 - `goal`: what this node is trying to prove or achieve
 - `status`: `candidate`, `active`, `running`, `blocked`, `failed`, `pruned`, or `done`
 - `evidence`: the main fact supporting or weakening the node
@@ -32,6 +41,18 @@ Track these fields for every active or recently failed node:
 
 Use coarse estimates when precision would be fake.
 Low, medium, high is acceptable, but keep the scale consistent within one task.
+
+## Branch Integrity Rules
+
+Apply these rules strictly:
+
+1. Siblings under an `OR` parent are competing routes, not shared parts of one route.
+2. Every `OR` child must be able to satisfy the parent on its own if it succeeds.
+3. Do not mark an `OR` parent complete by combining progress from multiple siblings.
+4. If a chosen route requires several mandatory actions, insert or relabel an explicit `AND` execution node before adding those child steps.
+5. If several competing routes share a common prerequisite, lift that prerequisite above them or represent it as a separate `AND` node, but keep the sibling routes independent.
+
+Read [references/and-or-semantics.md](references/and-or-semantics.md) for concrete good and bad examples.
 
 ## Start the Tree
 
@@ -50,6 +71,7 @@ Rewrite the request into:
 Generate two to five materially different routes from the root.
 Do not create branches that only restate the same idea with different wording.
 Good first-layer branches often differ by evidence source, intervention type, or diagnostic strategy.
+These first-layer branches are `OR` routes unless the task is obviously a required checklist.
 
 ### 3. Initialize the frontier
 
@@ -118,13 +140,25 @@ Run this loop until the root objective is satisfied or a real blocker remains:
 1. Select the best frontier leaf.
 2. Execute the smallest high-signal action that advances or tests that leaf.
 3. Interpret the result immediately.
-4. If the leaf advanced but did not finish the task, expand it into child nodes and rescore the frontier.
+4. If the leaf advanced but did not finish the task, choose whether the next children are competing `OR` routes or mandatory `AND` subtasks, label them explicitly, then rescore the frontier.
 5. If the leaf completed the task, verify the result and stop.
 6. If the leaf was falsified, mark it `failed`, record why, and remove it from the active frontier.
 7. If the leaf is temporarily impossible to try, mark it `blocked` and continue elsewhere.
 
 Repeat the same rule at every new depth.
 Every selected leaf becomes the root of a local subproblem, and its children compete the same way.
+
+For `OR` parents:
+
+- one successful child is enough to satisfy the parent
+- other siblings become `pruned`, `failed`, or still untested alternatives
+- do not merge sibling outputs into one composite answer unless the parent is converted to `AND`
+
+For `AND` parents:
+
+- all required children must complete to satisfy the parent
+- failure of a mandatory child threatens the whole route unless a replacement child is invented inside that same `AND` decomposition
+- these child steps are execution structure inside one route, not alternative routes to satisfy the original parent
 
 ## Backtrack and Re-expand
 
@@ -148,6 +182,8 @@ Search for new routes whenever the current frontier no longer contains a credibl
 ## Output the Tree Continuously
 
 Show the user the exploration tree throughout the task instead of hiding it.
+Do not wait for the user to ask for the tree.
+The first substantive response after creating the initial frontier must already include the current exploration tree.
 After each meaningful change, update:
 
 - the current tree or relevant subtree
@@ -155,6 +191,7 @@ After each meaningful change, update:
 - the selected leaf
 - the reason that leaf won
 - failures that were pruned
+- whether the selected parent is `OR` or `AND`
 
 Match the user's language in user-facing updates.
 If the conversation is in Chinese, keep node IDs and score fields compact as ASCII, but present the tree labels, commentary, and conclusion in Chinese.
@@ -172,6 +209,8 @@ Read [references/chinese-tree-output-format.md](references/chinese-tree-output-f
 - Prune dominated branches when another leaf clearly subsumes them.
 - Implement once one branch has enough evidence, then verify hard.
 - Match the user's language while preserving stable node IDs and comparable score fields.
+- Default to showing the tree proactively instead of waiting for a user prompt.
+- Preserve route independence under `OR` nodes.
 
 ## Anti-Patterns
 
@@ -181,8 +220,11 @@ Do not:
 - branch endlessly without selecting a winner
 - keep retrying a falsified leaf without new evidence
 - hide the search tree from the user
+- wait for the user to request the tree before showing it
 - call a branch "best" without comparing it to the current frontier
 - score leaves implicitly without exposing the comparison
+- merge sibling `OR` routes into one combined solution path
+- decompose a chosen route into mandatory steps without labeling that parent as `AND`
 - stop at planning when the next experiment is already clear
 
 ## Example Requests

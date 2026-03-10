@@ -1,4 +1,4 @@
-# Task Explorer
+﻿# Task Explorer
 
 Tree-driven autonomous task exploration for Codex-style agents.
 
@@ -14,6 +14,7 @@ Many agents are too conservative:
 - they fail to show the user how the search is evolving
 
 This skill fixes that by turning task execution into a branching search process with visible scoring, frontier management, and failure handling.
+It also distinguishes competing `OR` routes from mandatory `AND` subtasks so sibling solution branches are not incorrectly merged into one composite path.
 
 ## Core Idea
 
@@ -33,6 +34,9 @@ At each step, the agent selects the frontier leaf that best balances:
 - reversibility and safety
 
 If a branch fails, it is removed from the active frontier. The agent then selects the next best leaf. If the frontier is exhausted, the agent moves back up the tree and checks whether credible new branches can still be invented. If not, it reports that the task is unresolved under the current evidence and constraints.
+
+The tree is meant to be shown proactively.
+The agent should render it in the first substantive response after initial branching instead of waiting for the user to ask.
 
 ## Default Scoring
 
@@ -146,6 +150,7 @@ task-explorer/
 ├─ agents/
 │  └─ openai.yaml
 └─ references/
+   ├─ and-or-semantics.md
    ├─ tree-output-format.md
    ├─ scoring-and-update-template.md
    └─ chinese-tree-output-format.md
@@ -158,11 +163,13 @@ task-explorer/
 - `references/tree-output-format.md`: compact English tree display format
 - `references/scoring-and-update-template.md`: scoring rubric and reusable update templates
 - `references/chinese-tree-output-format.md`: Chinese-facing tree display format
+- `references/and-or-semantics.md`: strict route-vs-subtask semantics
 
 ## Design Principles
 
 - Prefer exploration over premature certainty
 - Compare branches explicitly instead of implicitly
+- Keep `OR` routes independent and label `AND` decompositions explicitly
 - Keep the frontier visible to the user
 - Backtrack quickly after falsification
 - Admit when no credible branch remains
@@ -172,3 +179,5 @@ task-explorer/
 - This repository is human-facing. The actual skill logic lives in `SKILL.md`.
 - The README is for GitHub visitors; the skill runtime does not depend on it.
 - OpenClaw installation details in this README follow the official Skills documentation: <https://docs.openclaw.ai/tools/skills>.
+
+
