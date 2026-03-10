@@ -38,6 +38,7 @@ Track these fields for every active or recently failed node:
 - `d`: estimated remaining steps from this node to completion
 - `c`: immediate trial cost for the next action on this node
 - `next`: the next concrete action if this node is selected
+- `blocker_scope`: optional, one of `local`, `route`, or `global` when a branch is blocked
 
 Use coarse estimates when precision would be fake.
 Low, medium, high is acceptable, but keep the scale consistent within one task.
@@ -143,7 +144,7 @@ Run this loop until the root objective is satisfied or a real blocker remains:
 4. If the leaf advanced but did not finish the task, choose whether the next children are competing `OR` routes or mandatory `AND` subtasks, label them explicitly, then rescore the frontier.
 5. If the leaf completed the task, verify the result and stop.
 6. If the leaf was falsified, mark it `failed`, record why, and remove it from the active frontier.
-7. If the leaf is temporarily impossible to try, mark it `blocked` and continue elsewhere.
+7. If the leaf is temporarily impossible to try, classify the blocker before deciding what to do next.
 
 Repeat the same rule at every new depth.
 Every selected leaf becomes the root of a local subproblem, and its children compete the same way.
@@ -160,6 +161,33 @@ For `AND` parents:
 - failure of a mandatory child threatens the whole route unless a replacement child is invented inside that same `AND` decomposition
 - these child steps are execution structure inside one route, not alternative routes to satisfy the original parent
 
+## Blocker Handling
+
+Do not treat every blocker as terminal.
+First classify the blocker:
+
+- `local`: a method-specific issue such as a broken API, changed library function, rate limit, missing one credential, bad parser, or inaccessible site
+- `route`: the chosen route still matters, but its current decomposition is blocked and must be re-expanded inside the route
+- `global`: a true external stop such as unavailable required credentials, unavailable target system, destructive action needing approval, or missing business decision
+
+Apply these rules:
+
+1. A `local` blocker does not end the parent route.
+2. A `local` blocker must trigger at least one new alternative child if any credible substitute method exists.
+3. Prefer adding substitute siblings under the same `OR` parent or replacement children inside the same `AND` route before escalating upward.
+4. A data-source failure is evidence against one method, not automatically against the whole analytical route.
+5. Only call the frontier exhausted after checking whether substitute methods can be invented at the current level or one level up.
+
+When a branch hits a `local` blocker, explicitly try alternatives such as:
+
+- different data source
+- different library or endpoint
+- cached or local snapshot
+- broader proxy variable or indirect evidence
+- manual extraction if cost is acceptable
+
+Read [references/blocker-re-expansion.md](references/blocker-re-expansion.md) for examples of correct and incorrect blocker handling.
+
 ## Backtrack and Re-expand
 
 Do not keep hammering a failed branch without new evidence.
@@ -169,10 +197,18 @@ When a leaf fails:
 - prune the leaf from active consideration
 - select the next best remaining frontier leaf
 
+When a leaf is blocked:
+
+- record the blocker and its scope
+- if the blocker is `local`, immediately ask whether substitute child nodes can be invented under the same parent
+- if substitutes exist, add them and keep the blocked node as one failed method, not as the end of the route
+- if no substitutes exist locally, move one level up and re-expand the ancestor
+- only preserve a node as `blocked` when further progress truly depends on an external change
+
 If all current leaves fail, become blocked, or look dominated:
 
 1. Inspect higher-level ancestors for unexplored alternatives.
-2. Check whether new sibling branches can be invented where uncertainty is still high.
+2. Check whether new sibling branches can be invented where uncertainty is still high, especially after method-specific blockers.
 3. Re-open the root only if lower-level re-expansion is weak or exhausted.
 4. If no credible new branches can be invented, report that the task remains unresolved under current evidence and constraints.
 
@@ -211,6 +247,8 @@ Read [references/chinese-tree-output-format.md](references/chinese-tree-output-f
 - Match the user's language while preserving stable node IDs and comparable score fields.
 - Default to showing the tree proactively instead of waiting for a user prompt.
 - Preserve route independence under `OR` nodes.
+- Treat broken tools, changed APIs, parser failures, and missing one data source as prompts to invent substitute children before declaring the route blocked.
+- Do not conclude "unresolved" until substitute methods were attempted or explicitly rejected as not credible.
 
 ## Anti-Patterns
 
@@ -226,6 +264,8 @@ Do not:
 - merge sibling `OR` routes into one combined solution path
 - decompose a chosen route into mandatory steps without labeling that parent as `AND`
 - stop at planning when the next experiment is already clear
+- stop at a blocked child without expanding substitute methods
+- treat "API changed", "search key missing", or "library call failed" as the end of the route when other evidence paths still exist
 
 ## Example Requests
 

@@ -56,6 +56,7 @@ Update the tree after:
 If the tree gets large, show only the relevant subtree plus a frontier summary.
 Do not dump the full history every time.
 If the frontier is exhausted, say so explicitly and state whether higher-level re-expansion found any credible new branch.
+If a node is blocked, also state whether the blocker is `local`, `route`, or `global`, and whether substitute children were created.
 
 ## Status Meanings
 
@@ -79,6 +80,11 @@ When no branch remains credible, say so directly.
 Example:
 
 - "The frontier is exhausted. I checked higher-level alternatives and did not find a credible new branch under the current constraints."
+
+When a blocker is only method-specific, say so directly.
+Example:
+
+- "C1 is blocked only as one method. I expanded C2 and C3 as substitute children under the same route."
 
 ## OR and AND Rules
 
