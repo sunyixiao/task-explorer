@@ -1,36 +1,40 @@
 ---
 name: task-explorer
-description: "Tree-driven autonomous task exploration and execution for unfamiliar codebases, bugs, workflows, datasets, and product questions. Use when Codex should proactively explore a task as a branching search tree, generate multiple solution routes, score and rank frontier leaves by success likelihood, remaining path length, execution cost, and information gain, distinguish OR route nodes from AND subtask nodes, backtrack after failed branches, check whether new branches can still be invented when the frontier is exhausted, and keep the user updated with the current exploration tree without waiting to be asked. Typical triggers include requests to explore independently, think through several routes, avoid stopping at planning, show the search tree, or keep trying alternatives until one succeeds or no credible route remains."
+description: "Tree-driven autonomous task exploration and execution for unfamiliar codebases, bugs, workflows, datasets, and product questions. Use when Codex should proactively explore a task as a top-down AND/OR goal tree, generate multiple solution branches, score and rank frontier leaves by success likelihood, remaining path length, execution cost, and information gain, distinguish OR alternatives from AND mandatory subtasks, parallelize eligible AND or OR children when enough agent capacity exists, backtrack after failed branches, check whether new branches can still be invented when the frontier is exhausted, and keep the user updated with the current exploration tree without waiting to be asked. Typical triggers include requests to explore independently, think through several routes, avoid stopping at planning, show the search tree, or keep trying alternatives until one succeeds or no credible route remains."
 ---
 
 # Task Explorer
 
 ## Overview
 
-Treat the task as an AND/OR search tree instead of a single linear plan.
-Maintain an explicit frontier of active leaf nodes, always pursue the most promising affordable shortest route, and keep expanding or backtracking until the task is finished or a real external blocker remains.
+Treat the task as a top-down AND/OR goal tree instead of a single linear plan.
+Keep the final objective at the top, place logical composition beneath it, maintain an explicit frontier of ready work leaves, and expand, parallelize, or backtrack until the task is finished or a real external blocker remains.
 
 ## Core Model
 
 Use these meanings consistently:
 
-- Root node: the user objective
-- Internal node: a decision, hypothesis, or partial subgoal
-- Leaf node: a branch that can be advanced next
-- Frontier: all non-failed leaves that still might reach the goal
+- Root goal: the final user objective at the top of the tree
+- Goal node: a concrete goal, hypothesis, or action-bearing subgoal
+- Logic node: an explicit `AND` or `OR` composition row beneath a goal
+- Frontier: all ready goal leaves that can be advanced now
+- Work set: one or more frontier leaves selected for the current execution cycle
 
-Every non-root node must also declare a node type:
+Use `OR` only for alternatives.
+Use `AND` only for mandatory decomposition.
+Do not invent extra `Route` wrapper nodes; the tree should be readable directly as goals plus `AND/OR` logic.
 
-- `OR`: children are alternative self-sufficient routes to satisfy the parent
-- `AND`: children are mandatory substeps inside one chosen route
+Draw the tree vertically:
 
-Default to `OR` when branching the search.
-Use `AND` only when the parent truly requires multiple child steps to be completed together.
+- parent goal on top
+- `AND` or `OR` beneath the parent when needed
+- children below the logic node
 
-Track these fields for every active or recently failed node:
+Do not draw the final goal on the right as a flowchart target.
+
+Track these fields for every goal node that can be evaluated or worked on:
 
 - `id`: short stable label such as `A`, `A2`, `B1`
-- `type`: `OR` or `AND`
 - `goal`: what this node is trying to prove or achieve
 - `status`: `candidate`, `active`, `running`, `blocked`, `failed`, `pruned`, or `done`
 - `evidence`: the main fact supporting or weakening the node
@@ -43,15 +47,20 @@ Track these fields for every active or recently failed node:
 Use coarse estimates when precision would be fake.
 Low, medium, high is acceptable, but keep the scale consistent within one task.
 
+Logic nodes are structural.
+Score and schedule goal leaves, not bare `AND/OR` operators.
+
 ## Branch Integrity Rules
 
 Apply these rules strictly:
 
-1. Siblings under an `OR` parent are competing routes, not shared parts of one route.
-2. Every `OR` child must be able to satisfy the parent on its own if it succeeds.
+1. Siblings under an `OR` logic node are competing alternatives.
+2. Every child under an `OR` logic node must be sufficient to satisfy the parent on its own if it succeeds.
 3. Do not mark an `OR` parent complete by combining progress from multiple siblings.
-4. If a chosen route requires several mandatory actions, insert or relabel an explicit `AND` execution node before adding those child steps.
-5. If several competing routes share a common prerequisite, lift that prerequisite above them or represent it as a separate `AND` node, but keep the sibling routes independent.
+4. Siblings under an `AND` logic node are all required to satisfy the parent.
+5. If several steps must all happen, insert an explicit `AND` logic node before those child steps.
+6. If several alternatives exist, insert an explicit `OR` logic node before those child steps.
+7. If several alternatives share a common prerequisite, lift that prerequisite above them or represent it as a separate `AND` decomposition, but keep the `OR` siblings independent.
 
 Read [references/and-or-semantics.md](references/and-or-semantics.md) for concrete good and bad examples.
 
@@ -72,16 +81,35 @@ Rewrite the request into:
 Generate two to five materially different routes from the root.
 Do not create branches that only restate the same idea with different wording.
 Good first-layer branches often differ by evidence source, intervention type, or diagnostic strategy.
-These first-layer branches are `OR` routes unless the task is obviously a required checklist.
+These first-layer branches normally sit under an `OR` logic node beneath the root goal.
 
 ### 3. Initialize the frontier
 
 For each first-layer leaf, estimate `p`, `d`, and `c`, then mark all viable leaves as `active`.
 Keep the frontier small enough that it can still be compared deliberately.
 
-## Select the Next Leaf
+## Parallel Scheduling
 
-Pick the leaf that appears most likely to reach the goal by the shortest affordable route.
+Logical structure and execution parallelism are different things.
+
+- `AND` or `OR` tells you the success condition.
+- available agent capacity tells you how many leaves can be worked in parallel.
+
+Let `k` be the number of independent workers you can afford right now.
+
+- If `k = 1`, select one frontier leaf.
+- If `k > 1`, select a work set of up to `k` compatible frontier leaves.
+
+Parallelism rules:
+
+- children under `AND` may be run in parallel when they are independent and all required
+- children under `OR` may also be run in parallel when agent capacity is high enough and speculative exploration is worth the cost
+- when one `OR` child succeeds, stop, prune, or deprioritize the other siblings unless more evidence is still needed
+- do not parallelize destructive or strongly conflicting actions without explicit reason
+
+## Select the Next Work Set
+
+Pick the frontier leaf or work set that appears most likely to reach the goal by the shortest affordable route.
 This is the default selection rule for every level of the tree.
 
 Evaluate each frontier leaf on:
@@ -101,6 +129,13 @@ Use this heuristic:
 
 If a quick numeric aid helps, use a rough priority like `p / (1 + d + c)`.
 Do not pretend the score is exact; it is only a ranking aid.
+
+When `k > 1`, fill the work set with the best compatible leaves after choosing the top candidate.
+Compatibility matters:
+
+- `AND` siblings are usually compatible
+- `OR` siblings are compatible only when speculative parallelism is worth the resource cost
+- two leaves that depend on the same single mutable resource may be incompatible
 
 ### Default Scoring Rubric
 
@@ -138,28 +173,32 @@ Read [references/scoring-and-update-template.md](references/scoring-and-update-t
 
 Run this loop until the root objective is satisfied or a real blocker remains:
 
-1. Select the best frontier leaf.
-2. Execute the smallest high-signal action that advances or tests that leaf.
-3. Interpret the result immediately.
-4. If the leaf advanced but did not finish the task, choose whether the next children are competing `OR` routes or mandatory `AND` subtasks, label them explicitly, then rescore the frontier.
-5. If the leaf completed the task, verify the result and stop.
-6. If the leaf was falsified, mark it `failed`, record why, and remove it from the active frontier.
-7. If the leaf is temporarily impossible to try, classify the blocker before deciding what to do next.
+1. Build or refresh the frontier.
+2. Determine available worker capacity `k`.
+3. Select the best work set.
+4. Execute one or more high-signal actions on those leaves.
+5. Interpret each result immediately.
+6. If a leaf advanced but did not finish the task, add an explicit `AND` or `OR` logic node if needed, then expand its children and rescore the frontier.
+7. If a leaf completed the task, propagate success upward according to the enclosing `AND/OR` logic.
+8. If a leaf was falsified, mark it `failed`, record why, and remove it from the active frontier.
+9. If a leaf is temporarily impossible to try, classify the blocker before deciding what to do next.
 
 Repeat the same rule at every new depth.
-Every selected leaf becomes the root of a local subproblem, and its children compete the same way.
+Every selected leaf in the current work set becomes the root of a local subproblem, and its children inherit the same scheduling rules.
 
-For `OR` parents:
+For `OR` logic nodes:
 
 - one successful child is enough to satisfy the parent
-- other siblings become `pruned`, `failed`, or still untested alternatives
-- do not merge sibling outputs into one composite answer unless the parent is converted to `AND`
+- other siblings become `pruned`, `failed`, `canceled`, or still untested alternatives
+- children may run in parallel if resources allow, but success still comes from any one sufficient child
+- do not merge sibling outputs into one composite answer
 
-For `AND` parents:
+For `AND` logic nodes:
 
 - all required children must complete to satisfy the parent
-- failure of a mandatory child threatens the whole route unless a replacement child is invented inside that same `AND` decomposition
-- these child steps are execution structure inside one route, not alternative routes to satisfy the original parent
+- children may run in parallel if they are independent and resources allow
+- failure of a mandatory child threatens the whole parent unless a replacement child is invented inside that same decomposition
+- these child steps are mandatory parts of one decomposition, not alternatives
 
 ## Blocker Handling
 
@@ -224,10 +263,13 @@ After each meaningful change, update:
 
 - the current tree or relevant subtree
 - the active frontier
-- the selected leaf
-- the reason that leaf won
+- the selected work set
+- the reason the selected leaf or work set won
 - failures that were pruned
-- whether the selected parent is `OR` or `AND`
+- the relevant `AND/OR` logic above the selected nodes
+
+The default display style is a top-down tree with the final objective at the top.
+Do not default to left-to-right arrows or put the goal on the far right.
 
 Match the user's language in user-facing updates.
 If the conversation is in Chinese, keep node IDs and score fields compact as ASCII, but present the tree labels, commentary, and conclusion in Chinese.
@@ -247,6 +289,9 @@ Read [references/chinese-tree-output-format.md](references/chinese-tree-output-f
 - Match the user's language while preserving stable node IDs and comparable score fields.
 - Default to showing the tree proactively instead of waiting for a user prompt.
 - Preserve route independence under `OR` nodes.
+- Keep the final goal at the top of the tree.
+- Treat `AND/OR` as logic structure, and treat parallelism as scheduling based on available workers.
+- If resources allow, consider parallel exploration of both `AND` children and selected `OR` alternatives.
 - Treat broken tools, changed APIs, parser failures, and missing one data source as prompts to invent substitute children before declaring the route blocked.
 - Do not conclude "unresolved" until substitute methods were attempted or explicitly rejected as not credible.
 
@@ -259,10 +304,12 @@ Do not:
 - keep retrying a falsified leaf without new evidence
 - hide the search tree from the user
 - wait for the user to request the tree before showing it
+- draw the final goal on the far right as a flowchart target by default
 - call a branch "best" without comparing it to the current frontier
 - score leaves implicitly without exposing the comparison
 - merge sibling `OR` routes into one combined solution path
 - decompose a chosen route into mandatory steps without labeling that parent as `AND`
+- invent extra `Route` wrapper nodes when `AND/OR` logic already expresses the structure
 - stop at planning when the next experiment is already clear
 - stop at a blocked child without expanding substitute methods
 - treat "API changed", "search key missing", or "library call failed" as the end of the route when other evidence paths still exist

@@ -61,15 +61,16 @@ Use it as a disciplined ranking aid.
 
 ```text
 Frontier Table
-ID   Type  Goal                        p  s  r  d  c  Score  Status   Next
-A2   OR    Profile import path         3  3  3  1  1  15     active   run import-time profiler
-B1   OR    Inspect config loading      2  2  3  2  1  10     active   trace config reads
-C1   OR    Check external IO waits     1  2  2  2  2   4     active   disable network calls locally
+ID   Goal                              p  s  r  d  c  Score  Status   Next
+B1   Prepare event list                3  2  3  1  1  14     active   gather candidate events
+B2   Fetch market data                 3  3  2  1  1  15     active   pull price series
+C    Use broader factor route          2  2  3  2  1  10     active   build alternate method
 ```
 
 Always select the highest-scoring credible leaf.
 If the table hides an important nuance, explain it in one line below the table.
-Do not compare `AND` execution subtasks and `OR` candidate routes as if they meant the same thing; the type column must stay visible.
+When using multiple workers, convert the top compatible leaves into the current work set.
+Explain whether each chosen item belongs to an `AND` decomposition or is a speculative `OR` alternative.
 
 ## Tree Update Template
 
@@ -79,19 +80,43 @@ Root objective: <goal>
 
 Current tree
 [0] Root: <goal> [active]
-|- [A][OR] <branch> [status]
-|  \- [A2][OR] <leaf> [active] p=3 s=3 r=3 d=1 c=1 score=15 <- selected
-\- [B][OR] <branch> [active] p=2 s=2 r=3 d=2 c=1 score=10
+[A] <goal> [active]
+\- OR
+   |- [B] <branch> [active] p=3 s=3 r=3 d=1 c=1 score=15
+   \- [C] <branch> [active] p=2 s=2 r=3 d=2 c=1 score=10
 
-Frontier: A2, B
-Selected leaf: A2
+Frontier: B, C
+Work set: B
 Why selected: <one-line comparison against the main alternatives>
-Next action: <concrete next step>
+Next action(s): <one or more concrete next steps>
 Last result: <what just happened>
 If this fails: <next best frontier leaf or re-expansion plan>
 ```
 
 The very first substantive reply after initial branching should already use this structure or the compact tree format.
+
+For mandatory decomposition:
+
+```text
+Exploration Update
+Root objective: <goal>
+
+Current tree
+[A] <goal> [active]
+\- OR
+   |- [B] <route> [active]
+   |  \- AND
+   |     |- [B1] <subtask> [active] p=3 s=2 r=3 d=1 c=1 score=14
+   |     \- [B2] <subtask> [active] p=3 s=3 r=2 d=1 c=1 score=15
+   \- [C] <alternative> [active] p=2 s=2 r=3 d=2 c=1 score=10
+
+Frontier: B1, B2, C
+Work set: B1, B2
+Why selected: B1 and B2 are independent mandatory children under the same AND decomposition, and two workers are available
+Next action(s): <parallel actions for B1 and B2>
+Last result: <what just happened>
+If this fails: <replacement child, alternate route, or re-expansion plan>
+```
 
 ## Failure and Exhaustion Template
 
@@ -102,7 +127,7 @@ Branch result
 Failed leaf: <id>
 Failure reason: <evidence that falsified or blocked it>
 Effect on frontier: <what was removed or downgraded>
-Next selected leaf: <id or none>
+Next work set: <id, ids, or none>
 Higher-level re-expansion: <what new branch search was attempted>
 Conclusion: <either the next route or that no credible branch remains under current constraints>
 ```
@@ -111,8 +136,9 @@ Conclusion: <either the next route or that no credible branch remains under curr
 
 - `OR` children are alternative routes. One successful child can satisfy the parent.
 - `AND` children are mandatory steps. All required children must complete.
-- If a route needs mandatory work items, insert an explicit `AND` node under that route.
+- If a goal needs mandatory work items, insert an explicit `AND` node under that goal.
 - Never combine sibling `OR` routes into one composite success path.
+- Both `AND` and `OR` children may run in parallel when enough workers are available, but the logical success condition does not change.
 
 ## When to Stop
 

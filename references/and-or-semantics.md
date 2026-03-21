@@ -10,6 +10,8 @@ There are two different relationships between child nodes:
 - `AND`: mandatory decomposition
 
 Do not blur them.
+Keep the final goal at the top and expand downward.
+Do not introduce extra `Route` wrapper nodes when `AND/OR` already expresses the structure.
 
 ## OR Node
 
@@ -20,6 +22,7 @@ Rules:
 - each child must be a self-sufficient candidate route
 - one child succeeding is enough for the parent
 - sibling progress must not be merged into one composite success
+- siblings may still be explored in parallel if worker capacity allows
 
 Example:
 
@@ -42,6 +45,7 @@ Rules:
 - every required child contributes to the same chosen route
 - all required children must complete for the parent to complete
 - failure of a mandatory child threatens that route unless replaced within the same decomposition
+- children may run in parallel if they are independent and workers are available
 
 Example:
 
@@ -59,29 +63,36 @@ Example:
 Bad pattern:
 
 ```text
-[C][OR] Solve via known-event route
-|- [C1] Prepare events
-\- [C2] Fetch market data
+[OR] -> A
+ /     \
+[AND]   D
+/   \
+B    C
 ```
 
-and then treating `C1 + C2` together as the way to satisfy `C`.
+This is wrong as a default task-tree layout because the goal is on the right and the logic reads like a sideways flowchart.
 
-This is wrong because `C1` and `C2` are not alternative routes.
-They are mandatory steps inside route `C`.
+The logical structure should be shown top-down:
+
+- `A` at the top
+- `OR` beneath `A`
+- `AND` beneath the relevant branch when required
 
 Correct pattern:
 
 ```text
-[C][OR] Solve via known-event route
-\- [Cx][AND] Execute route C
-   |- [Cx1] Prepare events
-   \- [Cx2] Fetch market data
+[A] Final objective
+\- OR
+   |- AND
+   |  |- [B]
+   |  \- [C]
+   \- [D]
 ```
 
-Here:
+This means:
 
-- `C` is the candidate route
-- `Cx` is the mandatory execution decomposition inside that route
+- complete both `B` and `C`, or
+- complete `D`
 
 ## Shared Prerequisites
 

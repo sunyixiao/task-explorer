@@ -1,11 +1,11 @@
-# Task Explorer
+﻿# Task Explorer
 
 Tree-driven autonomous task exploration for Codex-style agents.
 
 Original author: **sunyixiao**  
 Original repository: <https://github.com/sunyixiao/task-explorer>
 
-`task-explorer` is a skill that pushes an agent to treat a task as a search tree instead of a linear checklist. It generates multiple routes, scores active frontier leaves, chooses the most promising affordable shortest path, backtracks after failure, and keeps the user updated with the current exploration tree.
+`task-explorer` is a skill that pushes an agent to treat a task as a top-down AND/OR goal tree instead of a linear checklist. It generates multiple branches, scores active frontier leaves, chooses the most promising work set for the current agent budget, backtracks after failure, and keeps the user updated with the current exploration tree.
 
 ## What This Skill Solves
 
@@ -17,16 +17,19 @@ Many agents are too conservative:
 - they fail to show the user how the search is evolving
 
 This skill fixes that by turning task execution into a branching search process with visible scoring, frontier management, and failure handling.
-It also distinguishes competing `OR` routes from mandatory `AND` subtasks so sibling solution branches are not incorrectly merged into one composite path.
+It also distinguishes competing `OR` alternatives from mandatory `AND` subtasks so sibling branches are not incorrectly merged into one composite path.
 
 ## Core Idea
 
-The task is modeled as an exploration tree:
+The task is modeled as a top-down exploration tree:
 
 - Root node: the final user objective
-- First layer: multiple materially different solution routes
+- The root goal stays at the top
+- `OR` means alternatives
+- `AND` means mandatory decomposition
 - Leaf nodes: branches that can be tried next
 - Frontier: all active leaves that still might reach the goal
+- Work set: the leaves currently assigned to available workers
 
 At each step, the agent selects the frontier leaf that best balances:
 
@@ -36,10 +39,11 @@ At each step, the agent selects the frontier leaf that best balances:
 - information gain
 - reversibility and safety
 
-If a branch fails, it is removed from the active frontier. The agent then selects the next best leaf. If the frontier is exhausted, the agent moves back up the tree and checks whether credible new branches can still be invented. If not, it reports that the task is unresolved under the current evidence and constraints.
+If a branch fails, it is removed from the active frontier. The agent then selects the next best leaf or work set. If the frontier is exhausted, the agent moves back up the tree and checks whether credible new branches can still be invented. If not, it reports that the task is unresolved under the current evidence and constraints.
 
 The tree is meant to be shown proactively.
 The agent should render it in the first substantive response after initial branching instead of waiting for the user to ask.
+The goal should be drawn at the top, not on the far right as a sideways flowchart target.
 
 ## Default Scoring
 
@@ -129,20 +133,43 @@ Use $task-explorer to explore this repository as a search tree, keep the frontie
 - "Try several routes, choose the most promising shortest path, and keep going until one works."
 - "Keep searching for new branches if the current frontier fails, and say clearly if no credible route remains."
 
+## Visual Shape
+
+Prefer a top-down tree like this:
+
+```text
+[A] Final objective
+\- OR
+   |- AND
+   |  |- [B]
+   |  \- [C]
+   \- [D]
+```
+
+This means:
+
+- complete both `B` and `C`, or
+- complete `D`
+
+If enough agents exist, both `AND` children and selected `OR` children may run in parallel.
+Parallelism is a scheduling decision; `AND/OR` still defines the success condition.
+
 ## Example Output
 
 ```text
 探索树
-[0] 根目标: 修复启动慢并给出已验证结论 [活跃]
-|- [A] 复现并测量基线 [完成] p=3 s=3 r=3 d=1 c=1 score=14
-|  \- [A2] 分析 import 路径耗时 [活跃] p=3 s=3 r=3 d=1 c=1 score=15 <- 当前选中
-|- [B] 检查配置加载路径 [活跃] p=2 s=2 r=3 d=2 c=1 score=10
-\- [C] 检查 IO 或网络等待 [活跃] p=1 s=2 r=2 d=2 c=2 score=4
+[A] 完成分析 [活跃]
+\- OR
+   |- [B] 走已知事件路线 [活跃]
+   |  \- AND
+   |     |- [B1] 整理事件列表 [执行中]
+   |     \- [B2] 获取市场数据 [执行中]
+   \- [C] 走宽口径替代路线 [活跃]
 
-当前前沿: A2, B, C
-当前选中叶子: A2
-选择原因: A2 相比 B 和 C，成功概率更高，剩余路径更短，且当前尝试成本可接受。
-下一步动作: 运行 import-time profiler 并记录最慢模块。
+当前前沿: B1, B2, C
+当前工作集: B1, B2
+选择原因: B1 和 B2 属于同一 AND 结构下的独立必做子任务，当前有两个可用 agent。
+下一步动作: 并行整理事件列表并拉取市场数据。
 ```
 
 ## Repository Structure
@@ -182,5 +209,6 @@ task-explorer/
 - This repository is human-facing. The actual skill logic lives in `SKILL.md`.
 - The README is for GitHub visitors; the skill runtime does not depend on it.
 - OpenClaw installation details in this README follow the official Skills documentation: <https://docs.openclaw.ai/tools/skills>.
+
 
 
