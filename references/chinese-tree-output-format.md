@@ -16,6 +16,8 @@ Use these labels by default:
 - `Frontier` -> `当前前沿`
 - `Selected leaf` -> `当前选中叶子`
 - `Work set` -> `当前工作集`
+- `Ready` -> `就绪`
+- `Waiting` -> `等待`
 - `Why selected` -> `选择原因`
 - `Next action` -> `下一步动作`
 - `Last result` -> `最新结果`
@@ -31,7 +33,9 @@ Use these labels by default:
 For user-facing Chinese output, these mappings are usually the clearest:
 
 - `active` -> `活跃`
+- `ready` -> `就绪`
 - `running` -> `执行中`
+- `waiting` -> `等待`
 - `blocked` -> `阻塞`
 - `failed` -> `失败`
 - `pruned` -> `剪枝`
@@ -43,11 +47,11 @@ You may keep the raw English status token in brackets if consistency matters mor
 
 ```text
 探索树
-[A] 修复启动慢并给出已验证结论 [活跃]
+[A] 修复启动慢并给出已验证结论 [就绪]
 \- OR
-   |- [B] 走 import 分析路线 [活跃] p=3 d=1 c=1
-   |- [C] 检查配置加载路线 [活跃] p=2 d=2 c=1 <- 当前选中
-   \- [D] 检查 IO 或网络等待 [活跃] p=1 d=2 c=2
+   |- [B] 走 import 分析路线 [就绪] p=3 d=1 c=1
+   |- [C] 检查配置加载路线 [就绪] p=2 d=2 c=1 <- 当前选中
+   \- [D] 检查 IO 或网络等待 [就绪] p=1 d=2 c=2
 
 当前前沿: B, C, D
 当前工作集: C
@@ -60,18 +64,19 @@ You may keep the raw English status token in brackets if consistency matters mor
 
 ```text
 探索树
-[A] 完成分析 [活跃]
-\- OR
-   |- [B] 走已知事件路线 [活跃]
-   |  \- AND
-   |     |- [B1] 整理事件列表 [执行中]
-   |     \- [B2] 获取市场数据 [执行中]
-   \- [C] 走宽口径因子路线 [活跃]
+[A] 完成分析 [就绪]
+\- [D] 形成可验证结论 [就绪]
+   \- AND
+      |- [B] 建立可信评测框架 [就绪]
+      |- [C] 找到有效提升路线 [就绪]
+      |- [D1] 定义结果记录模板 [就绪]
+      |- [D2] 输出 before/after 对比 [等待]
+      \- [D3] 做最小消融并写结论 [等待]
 
-当前前沿: B1, B2, C
-当前工作集: B1, B2
-选择原因: B1 和 B2 是同一 AND 结构下相互独立且都必须完成的子任务，当前有两个可用 agent。
-最新结果: 已把 B 路线展开成必做并行子任务。
+当前前沿: B, C, D1
+当前工作集: B, C, D1
+选择原因: D 依赖 B 与 C 的产出，所以 D 在上、B/C 在下；同时 D1 已经就绪，而 D2/D3 仍需等待上游结果。
+最新结果: 已把 D 展开为就绪与等待子节点。
 ```
 
 ## Chinese Frontier Table Template
@@ -79,9 +84,10 @@ You may keep the raw English status token in brackets if consistency matters mor
 ```text
 前沿表
 ID   目标                               p  s  r  d  c  score  状态    下一步
-B1   整理事件列表                       3  2  3  1  1  14     活跃    汇总候选事件
-B2   获取市场数据                       3  3  2  1  1  15     活跃    拉取价格序列
-C    走宽口径因子路线                   2  2  3  2  1  10     活跃    建立替代分析法
+B    建立可信评测框架                   3  2  3  1  1  14     就绪    固定评测集与指标
+C    找到有效提升路线                   3  3  2  1  1  15     就绪    展开候选优化分支
+D1   定义结果记录模板                   2  2  3  1  1  10     就绪    建立实验日志与对比格式
+D2   输出 before/after 对比             1  1  3  2  1   5     等待    等待 B/C 产出
 ```
 
 Keep the table narrow.
@@ -152,6 +158,8 @@ When the frontier is exhausted, state it plainly:
 - 不能把多个 `OR` 兄弟节点的部分进展拼起来当成父节点成功。
 - 如果某条已选路线内部需要多个必做步骤，先插入一个显式 `AND` 节点，再把这些步骤挂在它下面。
 - `AND` 子节点在彼此独立时可以并行执行，而且它们必须全部完成。
+- 如果一个节点依赖别的节点产出，它应在这些前置节点的上方，而不是与它们平级。
+- 如果 `AND` 父节点里有些子任务现在能做、有些暂时不能做，就要明确标出 `就绪` 和 `等待`，不能整块挂起。
 
 错误示例：
 
@@ -176,12 +184,37 @@ When the frontier is exhausted, state it plainly:
 
 这里目标 `A` 在最上面，树是自上而下展开的。
 
+依赖方向错误示例：
+
+```text
+[A] 完成分析
+\- AND
+   |- [B] 建立评测框架
+   |- [C] 找到提升路线
+   \- [D] 写结论
+```
+
+如果 `D` 依赖 `B` 和 `C` 的结果，这个结构就是错的。
+
+依赖方向正确示例：
+
+```text
+[A] 完成分析
+\- [D] 写结论
+   \- AND
+      |- [B] 建立评测框架
+      |- [C] 找到提升路线
+      |- [D1] 定义记录模板
+      \- [D2] 汇总实验结论
+```
+
 ## Style Rules
 
 - Prefer short Chinese sentences over verbose narration.
 - Explain why the current work set beat the main alternatives.
 - Distinguish confirmed facts from estimates.
 - If no credible branch remains, say so directly instead of implying that more searching will surely help.
+
 
 
 

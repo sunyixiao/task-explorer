@@ -62,9 +62,10 @@ Use it as a disciplined ranking aid.
 ```text
 Frontier Table
 ID   Goal                              p  s  r  d  c  Score  Status   Next
-B1   Prepare event list                3  2  3  1  1  14     active   gather candidate events
-B2   Fetch market data                 3  3  2  1  1  15     active   pull price series
-C    Use broader factor route          2  2  3  2  1  10     active   build alternate method
+B    Build trusted evaluation          3  2  3  1  1  14     ready    fix eval suite and metrics
+C    Find effective route              3  3  2  1  1  15     ready    expand optimization candidates
+D1   Define result-log template        2  2  3  1  1  10     ready    create comparison format
+D2   Produce before/after comparison   1  1  3  2  1   5     waiting  wait for B/C outputs
 ```
 
 Always select the highest-scoring credible leaf.
@@ -79,15 +80,16 @@ Exploration Update
 Root objective: <goal>
 
 Current tree
-[0] Root: <goal> [active]
-[A] <goal> [active]
-\- OR
-   |- [B] <branch> [active] p=3 s=3 r=3 d=1 c=1 score=15
-   \- [C] <branch> [active] p=2 s=2 r=3 d=2 c=1 score=10
+[A] <goal> [ready]
+\- [D] <dependent parent goal> [ready]
+   \- AND
+      |- [B] <prerequisite goal> [ready] p=3 s=3 r=3 d=1 c=1 score=15
+      |- [C] <prerequisite goal> [ready] p=2 s=2 r=3 d=2 c=1 score=10
+      \- [D1] <startable conclusion child> [ready] p=2 s=2 r=3 d=1 c=1 score=10
 
-Frontier: B, C
-Work set: B
-Why selected: <one-line comparison against the main alternatives>
+Frontier: B, C, D1
+Work set: B, D1
+Why selected: <one-line explanation that respects dependency and readiness>
 Next action(s): <one or more concrete next steps>
 Last result: <what just happened>
 If this fails: <next best frontier leaf or re-expansion plan>
@@ -139,6 +141,7 @@ Conclusion: <either the next route or that no credible branch remains under curr
 - If a goal needs mandatory work items, insert an explicit `AND` node under that goal.
 - Never combine sibling `OR` routes into one composite success path.
 - Both `AND` and `OR` children may run in parallel when enough workers are available, but the logical success condition does not change.
+- If a node depends on other nodes' outputs, place it above them and decompose it until `ready` and `waiting` children are visible.
 
 ## When to Stop
 

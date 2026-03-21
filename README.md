@@ -5,7 +5,7 @@ Tree-driven autonomous task exploration for Codex-style agents.
 Original author: **sunyixiao**  
 Original repository: <https://github.com/sunyixiao/task-explorer>
 
-`task-explorer` is a skill that pushes an agent to treat a task as a top-down AND/OR goal tree instead of a linear checklist. It generates multiple branches, scores active frontier leaves, chooses the most promising work set for the current agent budget, backtracks after failure, and keeps the user updated with the current exploration tree.
+`task-explorer` is a skill that pushes an agent to treat a task as a top-down AND/OR goal tree instead of a linear checklist. It generates multiple branches, scores ready frontier leaves, chooses the most promising work set for the current agent budget, backtracks after failure, and keeps the user updated with the current exploration tree.
 
 ## What This Skill Solves
 
@@ -18,6 +18,7 @@ Many agents are too conservative:
 
 This skill fixes that by turning task execution into a branching search process with visible scoring, frontier management, and failure handling.
 It also distinguishes competing `OR` alternatives from mandatory `AND` subtasks so sibling branches are not incorrectly merged into one composite path.
+It orients the tree by real dependency: if one node depends on the outputs of others, it belongs above them, not beside them.
 
 ## Core Idea
 
@@ -27,8 +28,9 @@ The task is modeled as a top-down exploration tree:
 - The root goal stays at the top
 - `OR` means alternatives
 - `AND` means mandatory decomposition
+- dependent result nodes belong above the prerequisites they consume
 - Leaf nodes: branches that can be tried next
-- Frontier: all active leaves that still might reach the goal
+- Frontier: all ready leaves that can be worked on now
 - Work set: the leaves currently assigned to available workers
 
 At each step, the agent selects the frontier leaf that best balances:
@@ -44,6 +46,7 @@ If a branch fails, it is removed from the active frontier. The agent then select
 The tree is meant to be shown proactively.
 The agent should render it in the first substantive response after initial branching instead of waiting for the user to ask.
 The goal should be drawn at the top, not on the far right as a sideways flowchart target.
+When an `AND` node is decomposed, the tree should keep going until `ready` and `waiting` children are explicit whenever that information is discoverable.
 
 ## Default Scoring
 
@@ -154,22 +157,37 @@ This means:
 If enough agents exist, both `AND` children and selected `OR` children may run in parallel.
 Parallelism is a scheduling decision; `AND/OR` still defines the success condition.
 
+If one node depends on the outputs of others, the shape should reflect that dependency directly. For example:
+
+```text
+[A] Final objective
+\- [D] Produce validated conclusion
+   \- AND
+      |- [B] Build trusted evaluation
+      |- [C] Find effective route
+      |- [D1] Define result-log template
+      \- [D2] Produce before/after comparison
+```
+
+This is better than placing `D` beside `B` and `C` when `D` actually consumes their outputs.
+
 ## Example Output
 
 ```text
 探索树
-[A] 完成分析 [活跃]
-\- OR
-   |- [B] 走已知事件路线 [活跃]
-   |  \- AND
-   |     |- [B1] 整理事件列表 [执行中]
-   |     \- [B2] 获取市场数据 [执行中]
-   \- [C] 走宽口径替代路线 [活跃]
+[A] 完成分析 [就绪]
+\- [D] 形成可验证结论 [就绪]
+   \- AND
+      |- [B] 建立可信评测框架 [就绪]
+      |- [C] 找到有效提升路线 [就绪]
+      |- [D1] 定义结果记录模板 [就绪]
+      |- [D2] 输出 before/after 对比 [等待]
+      \- [D3] 做最小消融并写结论 [等待]
 
-当前前沿: B1, B2, C
-当前工作集: B1, B2
-选择原因: B1 和 B2 属于同一 AND 结构下的独立必做子任务，当前有两个可用 agent。
-下一步动作: 并行整理事件列表并拉取市场数据。
+当前前沿: B, C, D1
+当前工作集: B, C, D1
+选择原因: D 依赖 B 与 C 的产出，所以 D 在上、B/C 在下；同时 D1 已经就绪，而 D2/D3 仍需等待上游结果。
+下一步动作: 并行建立评测框架、展开提升路线、定义结果记录模板。
 ```
 
 ## Repository Structure
@@ -200,6 +218,8 @@ task-explorer/
 - Prefer exploration over premature certainty
 - Compare branches explicitly instead of implicitly
 - Keep `OR` routes independent and label `AND` decompositions explicitly
+- Orient parent-child structure by real dependency
+- Expose `ready` and `waiting` children instead of leaving large AND nodes opaque
 - Keep the frontier visible to the user
 - Backtrack quickly after falsification
 - Admit when no credible branch remains
@@ -209,6 +229,7 @@ task-explorer/
 - This repository is human-facing. The actual skill logic lives in `SKILL.md`.
 - The README is for GitHub visitors; the skill runtime does not depend on it.
 - OpenClaw installation details in this README follow the official Skills documentation: <https://docs.openclaw.ai/tools/skills>.
+
 
 
 

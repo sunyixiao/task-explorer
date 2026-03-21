@@ -1,6 +1,6 @@
 ---
 name: task-explorer
-description: "Tree-driven autonomous task exploration and execution for unfamiliar codebases, bugs, workflows, datasets, and product questions. Use when Codex should proactively explore a task as a top-down AND/OR goal tree, generate multiple solution branches, score and rank frontier leaves by success likelihood, remaining path length, execution cost, and information gain, distinguish OR alternatives from AND mandatory subtasks, parallelize eligible AND or OR children when enough agent capacity exists, backtrack after failed branches, check whether new branches can still be invented when the frontier is exhausted, and keep the user updated with the current exploration tree without waiting to be asked. Typical triggers include requests to explore independently, think through several routes, avoid stopping at planning, show the search tree, or keep trying alternatives until one succeeds or no credible route remains."
+description: "Tree-driven autonomous task exploration and execution for unfamiliar codebases, bugs, workflows, datasets, and product questions. Use when Codex should proactively explore a task as a top-down AND/OR goal tree, generate multiple solution branches, score and rank frontier leaves by success likelihood, remaining path length, execution cost, and information gain, distinguish OR alternatives from AND mandatory subtasks, orient parent-child structure by dependency, expand AND nodes until ready and waiting children are explicit, parallelize eligible AND or OR children when enough agent capacity exists, backtrack after failed branches, check whether new branches can still be invented when the frontier is exhausted, and keep the user updated with the current exploration tree without waiting to be asked. Typical triggers include requests to explore independently, think through several routes, avoid stopping at planning, show the search tree, or keep trying alternatives until one succeeds or no credible route remains."
 ---
 
 # Task Explorer
@@ -36,7 +36,7 @@ Track these fields for every goal node that can be evaluated or worked on:
 
 - `id`: short stable label such as `A`, `A2`, `B1`
 - `goal`: what this node is trying to prove or achieve
-- `status`: `candidate`, `active`, `running`, `blocked`, `failed`, `pruned`, or `done`
+- `status`: `candidate`, `ready`, `running`, `waiting`, `blocked`, `failed`, `pruned`, or `done`
 - `evidence`: the main fact supporting or weakening the node
 - `p`: estimated chance that this branch can still reach the final objective
 - `d`: estimated remaining steps from this node to completion
@@ -64,6 +64,23 @@ Apply these rules strictly:
 
 Read [references/and-or-semantics.md](references/and-or-semantics.md) for concrete good and bad examples.
 
+## Dependency Orientation Rules
+
+Apply these rules before accepting a tree shape:
+
+1. If node `X` depends on outputs, evidence, or completion from nodes `Y` and `Z`, then `X` must sit above that dependency set, not beside it.
+2. Do not place a synthesis, summary, comparison, validation, or conclusion node as a sibling of the prerequisites it consumes.
+3. Siblings should be peers at the same abstraction level:
+   - alternative ways to satisfy the same parent under `OR`, or
+   - jointly required children under `AND`
+4. If a node mostly exists to combine or judge the results of other nodes, it should be the parent goal whose children provide those inputs.
+5. If a child cannot even be meaningfully evaluated until another sibling finishes, the structure is probably wrong; move the dependent child downward beneath the prerequisite parent.
+
+Sanity check:
+
+- If `D2` needs results from `B` and `C`, then `D2` should not be a sibling of `B` and `C`.
+- Either `D` is the parent whose `AND` children include `B`, `C`, and the remaining dependent work, or the dependent work should be merged upward into the real parent goal.
+
 ## Start the Tree
 
 ### 1. Build the root
@@ -85,8 +102,15 @@ These first-layer branches normally sit under an `OR` logic node beneath the roo
 
 ### 3. Initialize the frontier
 
-For each first-layer leaf, estimate `p`, `d`, and `c`, then mark all viable leaves as `active`.
+For each first-layer leaf, estimate `p`, `d`, and `c`, then mark all viable leaves as `ready`.
 Keep the frontier small enough that it can still be compared deliberately.
+
+When an `AND` parent is introduced, continue decomposing until each child is classified as either:
+
+- `ready`: can be worked on now
+- `waiting`: structurally relevant, but cannot yet start because a true prerequisite is unfinished
+
+Do not leave a decomposable `AND` node as one opaque pending block if some of its descendants are already `ready`.
 
 ## Parallel Scheduling
 
@@ -178,7 +202,7 @@ Run this loop until the root objective is satisfied or a real blocker remains:
 3. Select the best work set.
 4. Execute one or more high-signal actions on those leaves.
 5. Interpret each result immediately.
-6. If a leaf advanced but did not finish the task, add an explicit `AND` or `OR` logic node if needed, then expand its children and rescore the frontier.
+6. If a leaf advanced but did not finish the task, add an explicit `AND` or `OR` logic node if needed, then expand its children and classify each descendant as `ready` or `waiting`.
 7. If a leaf completed the task, propagate success upward according to the enclosing `AND/OR` logic.
 8. If a leaf was falsified, mark it `failed`, record why, and remove it from the active frontier.
 9. If a leaf is temporarily impossible to try, classify the blocker before deciding what to do next.
@@ -197,6 +221,7 @@ For `AND` logic nodes:
 
 - all required children must complete to satisfy the parent
 - children may run in parallel if they are independent and resources allow
+- children that are structurally required but not yet startable should be shown as `waiting`, not hidden
 - failure of a mandatory child threatens the whole parent unless a replacement child is invented inside that same decomposition
 - these child steps are mandatory parts of one decomposition, not alternatives
 
@@ -263,6 +288,7 @@ After each meaningful change, update:
 
 - the current tree or relevant subtree
 - the active frontier
+- newly exposed `waiting` children when they matter to understanding the plan
 - the selected work set
 - the reason the selected leaf or work set won
 - failures that were pruned
@@ -291,6 +317,8 @@ Read [references/chinese-tree-output-format.md](references/chinese-tree-output-f
 - Preserve route independence under `OR` nodes.
 - Keep the final goal at the top of the tree.
 - Treat `AND/OR` as logic structure, and treat parallelism as scheduling based on available workers.
+- Orient parent-child structure by real dependency, not by informal project phases.
+- For `AND` goals, keep decomposing until `ready` and `waiting` children are explicit whenever that decomposition is discoverable.
 - If resources allow, consider parallel exploration of both `AND` children and selected `OR` alternatives.
 - Treat broken tools, changed APIs, parser failures, and missing one data source as prompts to invent substitute children before declaring the route blocked.
 - Do not conclude "unresolved" until substitute methods were attempted or explicitly rejected as not credible.
@@ -310,6 +338,8 @@ Do not:
 - merge sibling `OR` routes into one combined solution path
 - decompose a chosen route into mandatory steps without labeling that parent as `AND`
 - invent extra `Route` wrapper nodes when `AND/OR` logic already expresses the structure
+- place a result/synthesis/conclusion node beside the prerequisites it depends on
+- leave an `AND` node opaque when some descendants are already `ready`
 - stop at planning when the next experiment is already clear
 - stop at a blocked child without expanding substitute methods
 - treat "API changed", "search key missing", or "library call failed" as the end of the route when other evidence paths still exist

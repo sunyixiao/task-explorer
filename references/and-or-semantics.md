@@ -12,6 +12,7 @@ There are two different relationships between child nodes:
 Do not blur them.
 Keep the final goal at the top and expand downward.
 Do not introduce extra `Route` wrapper nodes when `AND/OR` already expresses the structure.
+Orient the tree by real dependency: a dependent result should sit above the prerequisites it consumes.
 
 ## OR Node
 
@@ -105,6 +106,64 @@ Use one of these patterns:
 3. Duplicate the prerequisite logically inside each route if that keeps the route self-contained.
 
 Choose the clearest representation, but never make sibling `OR` routes depend on each other.
+
+## Dependency Orientation
+
+If node `D` cannot be completed or even meaningfully judged until `B` and `C` produce outputs, then `D` should not be a sibling of `B` and `C`.
+
+Bad pattern:
+
+```text
+[A] Final objective
+\- AND
+   |- [B] Build evaluation framework
+   |- [C] Find effective route
+   \- [D] Write validated conclusion
+```
+
+when `D` depends on the outputs of `B` and `C`.
+
+Correct pattern:
+
+```text
+[A] Final objective
+\- [D] Write validated conclusion
+   \- AND
+      |- [B] Build evaluation framework
+      |- [C] Find effective route
+      |- [D1] Define result-log template
+      \- [D2] Produce before/after comparison
+```
+
+The parent is the thing being satisfied.
+Its children are the things required to satisfy it.
+
+## Ready vs Waiting
+
+When an `AND` parent is decomposed, do not stop if some children are already actionable.
+
+- mark actionable children as `ready`
+- mark not-yet-startable children as `waiting`
+- keep decomposing until the current executable boundary is visible
+
+Bad pattern:
+
+```text
+[D] Write validated conclusion [pending]
+```
+
+when `D1` could already start.
+
+Correct pattern:
+
+```text
+[D] Write validated conclusion [ready]
+\- AND
+   |- [B] Build evaluation framework [ready]
+   |- [C] Find effective route [ready]
+   |- [D1] Define result-log template [ready]
+   \- [D2] Produce before/after comparison [waiting]
+```
 
 ## Sanity Check
 
